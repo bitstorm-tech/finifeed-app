@@ -1,0 +1,126 @@
+:root {
+  --bg: #f7f6f2;
+  --surface: #ffffff;
+  --text: #1d1d1b;
+  --muted: #6b6a66;
+  --border: #e3e1da;
+  --accent: #2f5d50;
+  --warn: #9a4a1c;
+  --nav-height: 3.5rem;
+
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+.shell {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.brand {
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.status {
+  font-size: 0.8125rem;
+  color: var(--muted);
+}
+
+.status[data-status="offline"],
+.status[data-status="degraded"] {
+  color: var(--warn);
+}
+
+.content {
+  flex: 1;
+  width: 100%;
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: 1rem;
+  /* Keep content clear of the fixed bottom navigation on phones. */
+  padding-bottom: calc(var(--nav-height) + env(safe-area-inset-bottom) + 1rem);
+}
+
+.nav {
+  position: fixed;
+  inset: auto 0 0 0;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  height: calc(var(--nav-height) + env(safe-area-inset-bottom));
+  padding-bottom: env(safe-area-inset-bottom);
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.nav-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.nav-link.router-link-active {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+/* Desktop: navigation moves into a top bar below the header. */
+@media (min-width: 48rem) {
+  .shell {
+    flex-direction: column;
+  }
+
+  .nav {
+    position: static;
+    order: -1;
+    display: flex;
+    justify-content: center;
+    gap: 2rem;
+    height: auto;
+    padding: 0.5rem 1rem;
+    border-top: none;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .header {
+    order: -2;
+  }
+
+  .content {
+    padding-bottom: 2rem;
+  }
+}
+
+.page-title {
+  margin: 0 0 0.5rem;
+  font-size: 1.5rem;
+}
+
+.placeholder {
+  color: var(--muted);
+}

@@ -1665,3 +1665,25 @@ When product or engineering choices become complicated, return to this question:
 
 If the answer is no, it probably does not belong in the MVP.
 
+
+---
+
+# 33. Implementation status
+
+Maintained per §27.16. Records what is done and every deviation or decision taken during implementation.
+
+## Slice 0 — Repository foundation: done (2026-09-25)
+
+All acceptance criteria met: `bun run dev` starts database, server and client; migrations run on server start and via `bun run migrate`; `GET /api/v1/health` returns 200 (503 if the database is unreachable); `bun run test` runs unit and integration tests; the client calls the health endpoint through the Vite proxy.
+
+Decisions and deviations:
+
+- **TypeScript pinned to 6.0.x**, not 7.x. TypeScript 7 (native port) no longer ships the JavaScript compiler API that `vue-tsc` depends on. Revisit when `vue-tsc` supports TS 7.
+- **Testcontainers works under Bun 1.4.2** (verified). The `docker compose` fallback from §14.1 is not needed. One container is shared per `bun test` process; each test file gets its own freshly created database for isolation.
+- **Local PostgreSQL** is `postgres:17-alpine` on host port **5433** to avoid clashing with an existing local PostgreSQL on 5432.
+- **Migration runner** stores a SHA-256 checksum per applied file and refuses to run if an applied migration was modified (enforces §27.7). Concurrent runners are serialized with `pg_advisory_xact_lock`.
+- **Baseline migration** `0001_baseline.sql` is intentionally a no-op; UUIDs will use the built-in `gen_random_uuid()` (no extension).
+- **Connection shutdown:** `kysely-postgres-js` initializes lazily, so `db.destroy()` alone does not close a pool that was only used through the raw `postgres.js` client. `DatabaseConnection.close()` therefore ends both (covered by a regression test).
+- **Error envelope** `{ error: { code, message, requestId } }` and the §26 error codes live in `packages/shared`; unknown routes return `404 NOT_FOUND`, unhandled errors `500 INTERNAL_ERROR` without internals.
+- **Web client** has no automated tests in Slice 0: it contains only static placeholder views, so type checking (`vue-tsc`) and the production build are the meaningful checks. Component tests start with Slice 3 (Inbox UI).
+- **Lint:** only type checking for now (§28 "if configured").
