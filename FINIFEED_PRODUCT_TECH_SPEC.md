@@ -1,7 +1,7 @@
 # Finifeed — Product & Technical Specification
 
-**Version:** 0.2  
-**Date:** 2026-08-27  
+**Version:** 0.3  
+**Date:** 2026-09-25  
 **Status:** Implementation draft  
 **Working brand:** Finifeed  
 **Tagline:** *Your creator inbox.*  
@@ -18,6 +18,15 @@ When this document conflicts with an implementation convenience, **this document
 The first release is deliberately narrow: prove that people want a finite, creator-centric inbox before investing in broad social-platform aggregation.
 
 ## 1.1 Changelog
+
+### 0.3 (2026-09-25) — TypeScript end-to-end on Bun
+
+Decision: the backend is written in TypeScript on the Bun runtime instead of Kotlin/Ktor/JVM. Rationale: since 0.2 the client is a Vue/TypeScript web app, so the original reason for a JVM stack (sharing code with a Kotlin Multiplatform client) no longer applies. One language and one toolchain shorten the path to validation, and API types can be shared between client and server. Consequences:
+
+- **Backend stack** is Bun + Hono + PostgreSQL + Kysely, plain SQL migrations, Zod, `bun test` (§14.1).
+- **Repository** is a Bun workspace monorepo with `apps/server`, `apps/web`, `packages/shared` (§14.2).
+- Flyway / Gradle / Kotlin-specific rules are replaced by their TypeScript equivalents (§10.1, §14, §23 Slice 0, §25, §27).
+- Domain model, API contract, slices and non-goals are unchanged.
 
 ### 0.2 (2026-08-27) — Fastest path to hypothesis validation
 
@@ -563,16 +572,16 @@ Platform-specific code must not leak into Inbox or subscription business logic.
 
 Conceptual interface:
 
-```kotlin
+```ts
 interface ContentSourceAdapter {
-    val sourceType: SourceType
+  readonly sourceType: SourceType;
 
-    suspend fun resolveAccount(input: SourceAccountInput): ResolvedSourceAccount
+  resolveAccount(input: SourceAccountInput): Promise<ResolvedSourceAccount>;
 
-    suspend fun fetchRecentContent(
-        account: SourceAccount,
-        since: Instant?
-    ): List<ExternalContentItem>
+  fetchRecentContent(
+    account: SourceAccount,
+    since: Date | null,
+  ): Promise<ExternalContentItem[]>;
 }
 ```
 
@@ -862,27 +871,40 @@ Exact OAuth callback endpoints can be implementation-specific.
 
 ## 14.1 Recommended stack
 
-Use a simple JVM backend:
+Use a simple TypeScript backend on Bun:
 
-- Kotlin
-- Ktor
+- **Bun** as runtime, package manager (workspaces) and test runner (`bun test`)
+- TypeScript in `strict` mode, executed directly by Bun (no separate build step for the server)
+- **Hono** as HTTP framework
 - PostgreSQL
-- Flyway migrations
-- Exposed or straightforward JDBC repository layer
-- HikariCP
-- Logback
-- Testcontainers for integration tests
+- **Kysely** as typed SQL query builder over the `postgres` (postgres.js) driver; complex queries such as the Inbox query may use Kysely's `sql` template directly. No ORM with its own schema DSL (no Prisma, no TypeORM).
+- **Plain SQL migrations** (`apps/server/migrations/NNNN_description.sql`), applied in order inside a transaction by a small in-repo runner that records applied files in a `schema_migrations` table. Runs on server start and via `bun run migrate`.
+- **Zod** for request validation and the shared API contract
+- structured JSON logging (e.g. pino) with request IDs
+- Testcontainers (`@testcontainers/postgresql`) for integration tests. Its compatibility with Bun must be verified in Slice 0; if it is not reliable, fall back to a disposable PostgreSQL started via `docker compose` for the test run and document this.
 
-The exact versions should be pinned in the build and updated intentionally.
+Use `Bun.serve`, `fetch` and other Bun/web-standard APIs where they cover the need; do not add dependencies for them.
 
-## 14.2 Packaging by feature
+The exact versions (including Bun, pinned via `packageManager` / `.bun-version`) should be pinned and updated intentionally.
 
-Prefer feature/domain packages over generic technical buckets.
+## 14.2 Repository layout and packaging by feature
 
-Example:
+Bun workspace monorepo:
 
 ```text
-server/src/main/kotlin/.../finifeed/
+apps/
+  server/        Bun + Hono backend
+  web/           Vue 3 + Vite client
+packages/
+  shared/        API DTOs, Zod schemas, error codes, enums shared by server and web
+```
+
+`packages/shared` contains only the API contract (types, schemas, constants). It must not contain server-side business logic or database code.
+
+Inside the server, prefer feature/domain folders over generic technical buckets:
+
+```text
+apps/server/src/
   auth/
   creators/
   subscriptions/
@@ -900,19 +922,21 @@ Within a feature, separate transport/domain/persistence only when it materially 
 
 Avoid architectures where a simple action crosses eight layers of boilerplate.
 
-## 14.3 One top-level type per file
+## 14.3 Module conventions
 
-Use one public/top-level class, interface, enum, or data class per Kotlin file unless a tiny private helper is clearly local to an implementation.
+- One primary exported class/interface/type per file where it improves navigability; small closely related types (e.g. a DTO and its schema) may share a file.
+- Prefer plain functions and object literals over classes unless state or an interface implementation makes a class clearer.
+- No barrel files (`index.ts` re-exporting a whole folder) inside the server.
 
 ## 14.4 Transactions
 
-Use explicit transaction boundaries in application services for operations that update multiple persistent records.
+Use explicit transaction boundaries (`db.transaction()`) in application services for operations that update multiple persistent records.
 
-Do not allow Ktor route handlers to contain business rules.
+Do not allow Hono route handlers to contain business rules.
 
 ## 14.5 External HTTP
 
-All source API calls must go through source clients/adapters so they can be tested using fixture responses without real API calls.
+All source API calls must go through source clients/adapters so they can be tested using fixture responses without real API calls. Source clients receive their `fetch` function (and API key/base URL) via constructor/factory parameters so tests can inject a fake `fetch` serving fixtures; no global HTTP mocking library is required.
 
 Persist only data Finifeed actually needs. Do not mirror entire upstream responses indefinitely.
 
@@ -930,6 +954,8 @@ The validation client is a **web application**:
 - Vue Router
 - a small store (Pinia) only if component-local state becomes awkward
 - served as static files; talks to the backend via `/api/v1`
+- API types and Zod schemas imported from `packages/shared`
+- dependencies installed and scripts run via Bun; `vue-tsc` for type checking
 
 Rationale: the MVP is a list with three actions. A web app reaches testers through a link, needs no app store or TestFlight, and removes native build friction from the critical path. On phones, canonical `youtube.com` URLs open the YouTube app via the OS link handler, so `Open` works without any native code.
 
@@ -1180,16 +1206,16 @@ Runnable backend + database + minimal client shell.
 
 ### Deliverables
 
-- Gradle project structure for the backend
-- Ktor server boots
-- PostgreSQL connection
-- Flyway migration setup
+- Bun workspace structure (`apps/server`, `apps/web`, `packages/shared`, §14.2)
+- Hono server boots on Bun
+- PostgreSQL connection (local instance via `docker compose`)
+- SQL migration runner (§14.1) with a first no-op/baseline migration
 - health endpoint
 - web client shell (Vue 3 + Vite + TypeScript) with four navigation destinations
 - Vite dev proxy to the backend for `/api`
-- config loading for local/dev
-- Testcontainers integration-test base
-- CI build/test command for backend and client
+- config loading for local/dev (env vars, validated with Zod at startup)
+- Testcontainers integration-test base, or the documented `docker compose` fallback (§14.1)
+- CI build/test command for backend and client (type check, lint if configured, `bun test`, web build)
 
 ### Acceptance criteria
 
@@ -1450,6 +1476,8 @@ Focus on business rules:
 
 Do not write unit tests for trivial getters/data classes.
 
+All automated tests run with `bun test`.
+
 ## 25.2 Repository integration tests
 
 Use PostgreSQL/Testcontainers for:
@@ -1462,7 +1490,7 @@ Use PostgreSQL/Testcontainers for:
 
 ## 25.3 Source adapter tests
 
-Use captured/synthetic fixtures and a mock HTTP engine.
+Use captured/synthetic fixtures served through an injected fake `fetch` (§14.5).
 
 Test:
 
@@ -1522,12 +1550,12 @@ These instructions are part of the product spec.
 4. Do not introduce abstractions for hypothetical future platforms beyond the simple Source Adapter boundary.
 5. Do not add microservices, queues, caches, CQRS, event sourcing, generic rules engines, or plugin frameworks without a measured need.
 6. Keep domain behavior out of HTTP route handlers.
-7. Database changes must be Flyway migrations.
+7. Database changes must be plain SQL migration files applied by the migration runner (§14.1). Never edit an already-applied migration; add a new one.
 8. External API calls must be behind testable clients/adapters.
 9. No test should require live YouTube/Instagram/TikTok access in normal CI.
 10. Add meaningful tests for business logic and persistence behavior; avoid low-value tests.
-11. Keep Kotlin concise and idiomatic.
-12. Prefer one public/top-level type per Kotlin file.
+11. Keep TypeScript concise and idiomatic; `strict` mode, no `any` without a comment explaining why.
+12. Follow the module conventions in §14.3; share API types only via `packages/shared`.
 13. Do not implement scraping of Instagram or TikTok.
 14. Do not invent recommendations, discovery features, or engagement mechanics that are absent from this spec.
 15. If a requirement is ambiguous, choose the behavior that best preserves **finite, explicit, user-controlled consumption** and document the decision.
@@ -1604,7 +1632,7 @@ Do not block the core vertical slice on these decisions.
                   +---------+---------+
                   |                   |
                Client              Backend
-          Web app (Vue)          Ktor + Postgres
+          Web app (Vue)       Bun + Hono + Postgres
         Inbox / Later /             |
            Creators                 |
                   |                 |
