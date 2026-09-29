@@ -5,7 +5,7 @@
   "scripts": {
     "db:up": "docker compose up -d --wait db",
     "db:down": "docker compose down",
-    "dev": "bun run db:up && bun run --filter '@finifeed/server' --filter '@finifeed/web' dev",
+    "dev": "bun scripts/dev.ts",
     "migrate": "bun run --filter '@finifeed/server' migrate",
     "typecheck": "bun run --filter '*' typecheck",
     "test": "bun test",
