@@ -1687,3 +1687,27 @@ Decisions and deviations:
 - **Error envelope** `{ error: { code, message, requestId } }` and the §26 error codes live in `packages/shared`; unknown routes return `404 NOT_FOUND`, unhandled errors `500 INTERNAL_ERROR` without internals.
 - **Web client** has no automated tests in Slice 0: it contains only static placeholder views, so type checking (`vue-tsc`) and the production build are the meaningful checks. Component tests start with Slice 3 (Inbox UI).
 - **Lint:** only type checking for now (§28 "if configured").
+
+## Slice 1 — YouTube creator resolution + persistence: done (2026-09-29)
+
+All acceptance criteria met and covered by automated tests with YouTube fixtures served through an injected fake `fetch`: a handle resolves through `channels.list`; resolving the same channel repeatedly (including concurrently) stores exactly one SourceAccount and Creator; the uploads playlist ID is stored as `source_metadata.uploadsPlaylistId`; following twice returns the existing subscription; invalid input returns `400 INVALID_SOURCE_INPUT` without calling YouTube, an unknown handle `404 CREATOR_NOT_FOUND`.
+
+API: `GET /api/v1/creators`, `POST /api/v1/creators/resolve`, `POST /api/v1/subscriptions`, `DELETE /api/v1/subscriptions/{id}`. The Creators screen lets the user look up a channel, confirm it and follow it, lists followed creators alphabetically and supports unfollow.
+
+Decisions and deviations:
+
+- **Resolve persists, but does not follow.** `POST /creators/resolve` upserts the Creator and SourceAccount (shared, not user-specific data) and returns a candidate with `creatorId`; the client then follows via `POST /subscriptions { creatorId }`. This avoids a second `channels.list` call on confirm. Resolved-but-never-followed creators remain stored; harmless in MVP.
+- **Re-resolving refreshes** the source account (name, handle, avatar, metadata) and, because every creator has exactly one source in the MVP, also the creator's name and avatar. Revisit with manual creator linking (Phase 3).
+- **Accepted input:** `@handle`, bare handle, channel ID `UC…`, and `youtube.com` / `m.youtube.com` URLs with `/@handle`, `/channel/UC…` or legacy `/user/name` (resolved via `forUsername`). `/c/` custom URLs cannot be resolved by the API and video links are rejected, each with a specific message.
+- **Canonical URL** of a YouTube source account is `https://www.youtube.com/channel/{channelId}` (stable, unlike handles). `handle` is the channel's `snippet.customUrl` when it is an `@handle`, otherwise null.
+- **Following is idempotent** (`201` when created or reactivated, `200` when already following), so `ALREADY_FOLLOWING` is not used.
+- **Unfollow** sets `user_subscriptions.active = false` instead of deleting, so future content states survive a re-follow. Re-following reactivates the same subscription with `followed_at = now()` and a fresh `inbox_from = now() - 7 days`.
+- **No `PATCH /subscriptions/{id}`:** its only field would be priority, a non-goal before validation (§22).
+- **Development auth bypass:** a `users` table exists; the server creates `dev@finifeed.local` on start and every request acts as that user. Replaced in Slice 5.
+- **Error HTTP mapping:** `INVALID_SOURCE_INPUT`/`VALIDATION_FAILED` 400, `CREATOR_NOT_FOUND`/`NOT_FOUND` 404, `SOURCE_RATE_LIMITED` 429 (YouTube `quotaExceeded`/`rateLimitExceeded`/HTTP 429), `SOURCE_TEMPORARILY_UNAVAILABLE` 503 (network errors, upstream 5xx, invalid key, malformed responses, missing `YOUTUBE_API_KEY`). Upstream reasons are logged, not returned.
+- **Quota logging:** every Data API call logs endpoint, parameters (without the key), status and quota units.
+- **`YOUTUBE_API_KEY`** is required in production and optional in development (a warning is logged at startup).
+- **Concurrent resolves** of the same channel are serialized with a transaction-scoped advisory lock keyed on `(source_type, external_id)`; the unique constraint remains the safety net.
+- **jsonb parameters** must be passed as objects: postgres.js serializes them itself, and a pre-`JSON.stringify`-ed value is stored as a JSON *string* (covered by a test).
+- **Web client** still has no automated tests (see Slice 0); the resolve → follow → list flow was verified through the Vite proxy against the real server code with fixture-backed YouTube responses; the screen itself was type-checked and built but not yet clicked through in a browser.
+

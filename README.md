@@ -34,7 +34,11 @@ Health check: <http://localhost:3000/api/v1/health>
 
 ## Configuration
 
-The server reads environment variables (see [`.env.example`](.env.example)). In development no configuration is needed; to override defaults, create `apps/server/.env`. In production `APP_ENV=production` and `DATABASE_URL` are required.
+The server reads environment variables (see [`.env.example`](.env.example)). In development no configuration is needed; to override defaults, create `apps/server/.env`. In production `APP_ENV=production`, `DATABASE_URL` and `YOUTUBE_API_KEY` are required.
+
+To add YouTube creators locally, set `YOUTUBE_API_KEY` in `apps/server/.env` (a YouTube Data API v3 key from the Google Cloud console). Without it the server starts, but looking up a channel fails with "YouTube is temporarily unavailable". Automated tests never call YouTube; they use fixtures.
+
+Until authentication exists (Slice 5), every request acts as a single development user (`dev@finifeed.local`), created on server start.
 
 ## Repository layout
 
