@@ -1,8 +1,11 @@
 import { createApp } from "./app";
+import { ensureDevUser } from "./auth/dev-user";
 import { loadConfig } from "./config/config";
 import { connectDatabase } from "./database/database";
 import { migrate } from "./database/migrate";
 import { createLogger } from "./http/logger";
+import { createYouTubeClient } from "./sources/youtube/youtube-client";
+import { createYouTubeSourceAdapter } from "./sources/youtube/youtube-source-adapter";
 
 const config = loadConfig();
 const logger = createLogger(config);
@@ -16,7 +19,13 @@ try {
   process.exit(1);
 }
 
-const app = createApp({ db: database.db, logger });
+if (!config.youtubeApiKey) {
+  logger.warn("YOUTUBE_API_KEY is not set: adding YouTube creators will fail");
+}
+
+const youtube = createYouTubeSourceAdapter(createYouTubeClient({ apiKey: config.youtubeApiKey, logger }));
+const devUserId = await ensureDevUser(database.db);
+const app = createApp({ db: database.db, logger, sourceAdapters: { YOUTUBE: youtube }, devUserId });
 const server = Bun.serve({ port: config.port, fetch: app.fetch });
 logger.info({ port: server.port }, "server listening");
 
