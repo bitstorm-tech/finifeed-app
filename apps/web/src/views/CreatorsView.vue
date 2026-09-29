@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { CreatorCandidate, FollowedCreator } from "@finifeed/shared";
+import type { FollowedCreator } from "@finifeed/shared";
 import { onMounted, ref } from "vue";
 import { ApiError } from "../api/client";
 import { fetchFollowedCreators, followCreator, resolveYouTubeCreator, unfollowCreator } from "../api/creators";
@@ -8,9 +8,9 @@ const creators = ref<FollowedCreator[]>([]);
 const listState = ref<"loading" | "ready" | "error">("loading");
 
 const input = ref("");
-const candidate = ref<CreatorCandidate | null>(null);
-const busy = ref<"resolving" | "following" | null>(null);
+const busy = ref(false);
 const formError = ref<string | null>(null);
+const notice = ref<string | null>(null);
 const unfollowing = ref<string | null>(null);
 const listError = ref<string | null>(null);
 
@@ -28,41 +28,29 @@ async function loadCreators() {
   }
 }
 
-async function findCreator() {
-  if (!input.value.trim() || busy.value) return;
-  busy.value = "resolving";
-  formError.value = null;
-  candidate.value = null;
-  try {
-    candidate.value = await resolveYouTubeCreator(input.value);
-  } catch (error) {
-    formError.value = messageOf(error);
-  } finally {
-    busy.value = null;
-  }
-}
-
+/** Resolves the handle or URL and follows it right away; a wrong channel can simply be unfollowed. */
 async function follow() {
-  if (!candidate.value || busy.value) return;
-  busy.value = "following";
+  if (!input.value.trim() || busy.value) return;
+  busy.value = true;
   formError.value = null;
+  notice.value = null;
   try {
-    const followed = await followCreator(candidate.value.creatorId);
-    creators.value = [...creators.value.filter((c) => c.subscriptionId !== followed.subscriptionId), followed].sort(
-      (a, b) => a.displayName.localeCompare(b.displayName, undefined, { sensitivity: "base" }),
-    );
-    candidate.value = null;
+    const candidate = await resolveYouTubeCreator(input.value);
+    if (candidate.subscriptionId) {
+      notice.value = `You already follow ${candidate.displayName}.`;
+    } else {
+      const followed = await followCreator(candidate.creatorId);
+      creators.value = [...creators.value.filter((c) => c.subscriptionId !== followed.subscriptionId), followed].sort(
+        (a, b) => a.displayName.localeCompare(b.displayName, undefined, { sensitivity: "base" }),
+      );
+      notice.value = `Now following ${followed.displayName}.`;
+    }
     input.value = "";
   } catch (error) {
     formError.value = messageOf(error);
   } finally {
-    busy.value = null;
+    busy.value = false;
   }
-}
-
-function cancel() {
-  candidate.value = null;
-  formError.value = null;
 }
 
 async function unfollow(creator: FollowedCreator) {
@@ -86,7 +74,7 @@ onMounted(loadCreators);
   <section>
     <h1 class="page-title">Creators</h1>
 
-    <form class="add-form" @submit.prevent="findCreator">
+    <form class="add-form" @submit.prevent="follow">
       <label for="creator-input" class="add-label">Add a YouTube channel</label>
       <div class="add-row">
         <input
@@ -99,40 +87,15 @@ onMounted(loadCreators);
           autocapitalize="off"
           spellcheck="false"
           placeholder="@handle or channel URL"
-          :disabled="busy !== null"
+          :disabled="busy"
         />
-        <button class="button" type="submit" :disabled="!input.trim() || busy !== null">
-          {{ busy === "resolving" ? "Looking up…" : "Find" }}
+        <button class="button" type="submit" :disabled="!input.trim() || busy">
+          {{ busy ? "Following…" : "Follow" }}
         </button>
       </div>
       <p v-if="formError" class="form-error" role="alert">{{ formError }}</p>
+      <p v-else-if="notice" class="notice" aria-live="polite">{{ notice }}</p>
     </form>
-
-    <article v-if="candidate" class="candidate" aria-live="polite">
-      <div class="creator">
-        <img v-if="candidate.avatarUrl" :src="candidate.avatarUrl" alt="" class="avatar" referrerpolicy="no-referrer" />
-        <div v-else class="avatar avatar-fallback" aria-hidden="true">{{ candidate.displayName.charAt(0) }}</div>
-        <div class="creator-text">
-          <span class="creator-name">{{ candidate.displayName }}</span>
-          <a :href="candidate.source.canonicalUrl" target="_blank" rel="noopener" class="creator-meta">
-            <span class="badge">YouTube</span>
-            {{ candidate.source.handle ?? "Channel" }}
-          </a>
-        </div>
-      </div>
-      <div class="candidate-actions">
-        <template v-if="candidate.subscriptionId">
-          <span class="muted">You already follow this creator.</span>
-          <button class="button button-secondary" type="button" @click="cancel">Close</button>
-        </template>
-        <template v-else>
-          <button class="button button-secondary" type="button" :disabled="busy !== null" @click="cancel">Cancel</button>
-          <button class="button" type="button" :disabled="busy !== null" @click="follow">
-            {{ busy === "following" ? "Following…" : "Follow" }}
-          </button>
-        </template>
-      </div>
-    </article>
 
     <h2 class="section-title">Following</h2>
     <p v-if="listState === 'loading'" class="muted">Loading…</p>
@@ -220,24 +183,9 @@ onMounted(loadCreators);
   color: var(--warn);
 }
 
-.candidate {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  margin-bottom: 1.5rem;
-  padding: 0.75rem;
-  border: 1px solid var(--border);
-  border-radius: 0.75rem;
-  background: var(--surface);
-}
-
-.candidate-actions {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-left: auto;
+.notice {
+  margin: 0.5rem 0 0;
+  color: var(--muted);
 }
 
 .section-title {
