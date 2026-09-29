@@ -3,6 +3,7 @@ import type { FollowedCreator } from "@finifeed/shared";
 import { onMounted, ref } from "vue";
 import { ApiError } from "../api/client";
 import { fetchFollowedCreators, followCreator, resolveYouTubeCreator, unfollowCreator } from "../api/creators";
+import ConfirmDialog from "../components/ConfirmDialog.vue";
 
 const creators = ref<FollowedCreator[]>([]);
 const listState = ref<"loading" | "ready" | "error">("loading");
@@ -13,6 +14,7 @@ const formError = ref<string | null>(null);
 const notice = ref<string | null>(null);
 const unfollowing = ref<string | null>(null);
 const listError = ref<string | null>(null);
+const pendingUnfollow = ref<FollowedCreator | null>(null);
 
 function messageOf(error: unknown): string {
   return error instanceof ApiError ? error.message : "Something went wrong. Please try again.";
@@ -53,8 +55,10 @@ async function follow() {
   }
 }
 
-async function unfollow(creator: FollowedCreator) {
-  if (!window.confirm(`Unfollow ${creator.displayName}?`)) return;
+async function confirmUnfollow() {
+  const creator = pendingUnfollow.value;
+  pendingUnfollow.value = null;
+  if (!creator) return;
   unfollowing.value = creator.subscriptionId;
   listError.value = null;
   try {
@@ -134,13 +138,23 @@ onMounted(loadCreators);
             class="button button-secondary button-small"
             type="button"
             :disabled="unfollowing === creator.subscriptionId"
-            @click="unfollow(creator)"
+            @click="pendingUnfollow = creator"
           >
             Unfollow
           </button>
         </li>
       </ul>
     </template>
+
+    <ConfirmDialog
+      :open="pendingUnfollow !== null"
+      :title="`Unfollow ${pendingUnfollow?.displayName ?? ''}?`"
+      message="Their new videos will no longer show up in your inbox."
+      confirm-label="Unfollow"
+      destructive
+      @confirm="confirmUnfollow"
+      @cancel="pendingUnfollow = null"
+    />
   </section>
 </template>
 
