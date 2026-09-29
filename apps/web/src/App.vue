@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
 import { fetchHealth } from "./api/health";
+import ToastHost from "./ToastHost.vue";
 
 const destinations = [
   { to: "/inbox", label: "Inbox" },
@@ -36,5 +37,7 @@ onMounted(async () => {
         {{ d.label }}
       </RouterLink>
     </nav>
+
+    <ToastHost />
   </div>
 </template>

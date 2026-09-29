@@ -4,6 +4,7 @@ import { onMounted, ref } from "vue";
 import { ApiError } from "../api/client";
 import { fetchFollowedCreators, followCreator, resolveYouTubeCreator, unfollowCreator } from "../api/creators";
 import ConfirmDialog from "../components/ConfirmDialog.vue";
+import { showToast } from "../toast";
 
 const creators = ref<FollowedCreator[]>([]);
 const listState = ref<"loading" | "ready" | "error">("loading");
@@ -11,7 +12,6 @@ const listState = ref<"loading" | "ready" | "error">("loading");
 const input = ref("");
 const busy = ref(false);
 const formError = ref<string | null>(null);
-const notice = ref<string | null>(null);
 const unfollowing = ref<string | null>(null);
 const listError = ref<string | null>(null);
 const pendingUnfollow = ref<FollowedCreator | null>(null);
@@ -35,17 +35,16 @@ async function follow() {
   if (!input.value.trim() || busy.value) return;
   busy.value = true;
   formError.value = null;
-  notice.value = null;
   try {
     const candidate = await resolveYouTubeCreator(input.value);
     if (candidate.subscriptionId) {
-      notice.value = `You already follow ${candidate.displayName}.`;
+      showToast(`You already follow ${candidate.displayName}.`);
     } else {
       const followed = await followCreator(candidate.creatorId);
       creators.value = [...creators.value.filter((c) => c.subscriptionId !== followed.subscriptionId), followed].sort(
         (a, b) => a.displayName.localeCompare(b.displayName, undefined, { sensitivity: "base" }),
       );
-      notice.value = `Now following ${followed.displayName}.`;
+      showToast(`Now following ${followed.displayName}.`);
     }
     input.value = "";
   } catch (error) {
@@ -98,7 +97,6 @@ onMounted(loadCreators);
         </button>
       </div>
       <p v-if="formError" class="form-error" role="alert">{{ formError }}</p>
-      <p v-else-if="notice" class="notice" aria-live="polite">{{ notice }}</p>
     </form>
 
     <h2 class="section-title">Following</h2>
@@ -195,11 +193,6 @@ onMounted(loadCreators);
 .form-error {
   margin: 0.5rem 0 0;
   color: var(--warn);
-}
-
-.notice {
-  margin: 0.5rem 0 0;
-  color: var(--muted);
 }
 
 .section-title {
