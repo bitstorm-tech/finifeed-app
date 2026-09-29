@@ -10,6 +10,7 @@ describe("loadConfig", () => {
       port: 3000,
       databaseUrl: "postgres://finifeed:finifeed@localhost:5433/finifeed",
       logLevel: "info",
+      logFormat: "text",
       youtubeApiKey: undefined,
     });
   });
@@ -35,6 +36,12 @@ describe("loadConfig", () => {
     expect(config.port).toBe(8080);
     expect(config.databaseUrl).toBe("postgresql://user:pw@db.internal:5432/finifeed");
     expect(config.youtubeApiKey).toBe("test-key");
+    expect(config.logFormat).toBe("json");
+  });
+
+  test("lets LOG_FORMAT override the default", () => {
+    expect(loadConfig({ LOG_FORMAT: "json" }).logFormat).toBe("json");
+    expect(() => loadConfig({ LOG_FORMAT: "xml" })).toThrow(/Invalid configuration/);
   });
 
   test("rejects invalid values", () => {

@@ -8,6 +8,7 @@ const EnvSchema = z.object({
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
   DATABASE_URL: z.url({ protocol: /^postgres(ql)?$/ }).optional(),
   LOG_LEVEL: z.enum(["trace", "debug", "info", "warn", "error", "fatal"]).default("info"),
+  LOG_FORMAT: z.enum(["json", "text"]).optional(),
   YOUTUBE_API_KEY: z.string().trim().min(1).optional(),
 });
 
@@ -18,6 +19,8 @@ export interface Config {
   port: number;
   databaseUrl: string;
   logLevel: z.infer<typeof EnvSchema>["LOG_LEVEL"];
+  /** `json` (spec §19) or readable `text` (pino-pretty). Defaults to `text` in development, `json` otherwise. */
+  logFormat: "json" | "text";
   /** YouTube Data API key. Optional in development; creator resolution fails without it. */
   youtubeApiKey: string | undefined;
 }
@@ -28,7 +31,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
   if (!parsed.success) {
     throw new Error(`Invalid configuration:\n${z.prettifyError(parsed.error)}`);
   }
-  const { APP_ENV, PORT, DATABASE_URL, LOG_LEVEL, YOUTUBE_API_KEY } = parsed.data;
+  const { APP_ENV, PORT, DATABASE_URL, LOG_LEVEL, LOG_FORMAT, YOUTUBE_API_KEY } = parsed.data;
 
   if (APP_ENV === "production" && !DATABASE_URL) {
     throw new Error("Invalid configuration: DATABASE_URL is required in production");
@@ -42,6 +45,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     port: PORT,
     databaseUrl: DATABASE_URL ?? LOCAL_DATABASE_URL,
     logLevel: LOG_LEVEL,
+    logFormat: LOG_FORMAT ?? (APP_ENV === "development" ? "text" : "json"),
     youtubeApiKey: YOUTUBE_API_KEY,
   };
 }
