@@ -16,7 +16,7 @@ bun install
 bun run dev
 ```
 
-`bun run dev` starts PostgreSQL (docker compose, host port **5433**), the server on <http://localhost:3000> and the web client on <http://localhost:5173>. The client proxies `/api` to the server. Pending migrations are applied automatically when the server starts.
+`bun run dev` starts PostgreSQL (docker compose, host port **5433**), the server on <http://localhost:3000> and the web client on <http://localhost:5173>. The client proxies `/api` to the server. Pending migrations are applied automatically when the server starts. Stopping it with `Ctrl+C` also stops the database container.
 
 Health check: <http://localhost:3000/api/v1/health>
 
