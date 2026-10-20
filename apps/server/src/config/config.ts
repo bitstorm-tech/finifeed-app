@@ -1,8 +1,5 @@
 import { z } from "zod";
 
-/** Matches the database from docker-compose.yml. Never used in production. */
-const LOCAL_DATABASE_URL = "postgres://finifeed:finifeed@localhost:5433/finifeed";
-
 const EnvSchema = z.object({
   APP_ENV: z.enum(["development", "test", "production"]).default("development"),
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
@@ -33,8 +30,10 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
   }
   const { APP_ENV, PORT, DATABASE_URL, LOG_LEVEL, LOG_FORMAT, YOUTUBE_API_KEY } = parsed.data;
 
-  if (APP_ENV === "production" && !DATABASE_URL) {
-    throw new Error("Invalid configuration: DATABASE_URL is required in production");
+  if (!DATABASE_URL) {
+    throw new Error(
+      "Invalid configuration: DATABASE_URL is required (set it in apps/server/.env, see .env.example)",
+    );
   }
   if (APP_ENV === "production" && !YOUTUBE_API_KEY) {
     throw new Error("Invalid configuration: YOUTUBE_API_KEY is required in production");
@@ -43,7 +42,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
   return {
     appEnv: APP_ENV,
     port: PORT,
-    databaseUrl: DATABASE_URL ?? LOCAL_DATABASE_URL,
+    databaseUrl: DATABASE_URL,
     logLevel: LOG_LEVEL,
     logFormat: LOG_FORMAT ?? (APP_ENV === "development" ? "text" : "json"),
     youtubeApiKey: YOUTUBE_API_KEY,

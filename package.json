@@ -3,9 +3,7 @@
   "packageManager": "bun@1.4.2",
   "private": true,
   "scripts": {
-    "db:up": "docker compose up -d --wait db",
-    "db:down": "docker compose down",
-    "dev": "bun scripts/dev.ts",
+    "dev": "bun run --filter '@finifeed/server' --filter '@finifeed/web' dev",
     "migrate": "bun run --filter '@finifeed/server' migrate",
     "typecheck": "bun run --filter '*' typecheck",
     "test": "bun test",

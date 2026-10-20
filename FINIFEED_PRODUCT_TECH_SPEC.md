@@ -1680,7 +1680,7 @@ Decisions and deviations:
 
 - **TypeScript pinned to 6.0.x**, not 7.x. TypeScript 7 (native port) no longer ships the JavaScript compiler API that `vue-tsc` depends on. Revisit when `vue-tsc` supports TS 7.
 - **Testcontainers works under Bun 1.4.2** (verified). The `docker compose` fallback from §14.1 is not needed. One container is shared per `bun test` process; each test file gets its own freshly created database for isolation.
-- **Local PostgreSQL** is `postgres:17-alpine` on host port **5433** to avoid clashing with an existing local PostgreSQL on 5432.
+- **Local PostgreSQL:** originally a `docker compose` container (`postgres:17-alpine`, host port 5433). Since 2026-10-20 development uses an existing PostgreSQL database configured via `DATABASE_URL` (now required in every environment); `bun run dev` no longer starts a database. Docker is only needed for the Testcontainers-based tests.
 - **Migration runner** stores a SHA-256 checksum per applied file and refuses to run if an applied migration was modified (enforces §27.7). Concurrent runners are serialized with `pg_advisory_xact_lock`.
 - **Baseline migration** `0001_baseline.sql` is intentionally a no-op; UUIDs will use the built-in `gen_random_uuid()` (no extension).
 - **Connection shutdown:** `kysely-postgres-js` initializes lazily, so `db.destroy()` alone does not close a pool that was only used through the raw `postgres.js` client. `DatabaseConnection.close()` therefore ends both (covered by a regression test).

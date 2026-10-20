@@ -2,20 +2,23 @@ import { describe, expect, test } from "bun:test";
 import { loadConfig } from "./config";
 
 describe("loadConfig", () => {
-  test("uses local defaults in development", () => {
-    const config = loadConfig({});
+  const DATABASE_URL = "postgres://finifeed:finifeed@localhost:5432/finifeed";
+
+  test("uses defaults in development", () => {
+    const config = loadConfig({ DATABASE_URL });
 
     expect(config).toEqual({
       appEnv: "development",
       port: 3000,
-      databaseUrl: "postgres://finifeed:finifeed@localhost:5433/finifeed",
+      databaseUrl: DATABASE_URL,
       logLevel: "info",
       logFormat: "text",
       youtubeApiKey: undefined,
     });
   });
 
-  test("requires DATABASE_URL in production", () => {
+  test("requires DATABASE_URL", () => {
+    expect(() => loadConfig({})).toThrow(/DATABASE_URL is required/);
     expect(() => loadConfig({ APP_ENV: "production" })).toThrow(/DATABASE_URL is required/);
   });
 
@@ -40,8 +43,8 @@ describe("loadConfig", () => {
   });
 
   test("lets LOG_FORMAT override the default", () => {
-    expect(loadConfig({ LOG_FORMAT: "json" }).logFormat).toBe("json");
-    expect(() => loadConfig({ LOG_FORMAT: "xml" })).toThrow(/Invalid configuration/);
+    expect(loadConfig({ DATABASE_URL, LOG_FORMAT: "json" }).logFormat).toBe("json");
+    expect(() => loadConfig({ DATABASE_URL, LOG_FORMAT: "xml" })).toThrow(/Invalid configuration/);
   });
 
   test("rejects invalid values", () => {
