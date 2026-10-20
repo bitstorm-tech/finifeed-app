@@ -8,6 +8,7 @@ import { healthRoutes } from "./health/health-routes";
 import type { AppEnv } from "./http/app-env";
 import { handleError, handleNotFound } from "./http/errors";
 import { requestLogging } from "./http/request-logging";
+import { integrationRoutes } from "./integrations/integration-routes";
 import type { SourceAdapters } from "./sources/content-source-adapter";
 import { subscriptionRoutes } from "./subscriptions/subscription-routes";
 
@@ -25,7 +26,8 @@ export function createApp({ db, logger, sourceAdapters, devUserId }: AppDependen
     .route("/", healthRoutes(db))
     .use(devAuth(devUserId))
     .route("/", creatorRoutes(db, sourceAdapters))
-    .route("/", subscriptionRoutes(db));
+    .route("/", subscriptionRoutes(db))
+    .route("/", integrationRoutes(db, sourceAdapters));
 
   return new Hono<AppEnv>()
     .use(requestId())

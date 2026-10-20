@@ -19,21 +19,33 @@ export async function followCreator(
   const creator = await db.selectFrom("creators").select("id").where("id", "=", creatorId).executeTakeFirst();
   if (!creator) throw new AppError(ErrorCode.CREATOR_NOT_FOUND, "Creator not found.");
 
-  const inserted = await db
+  const created = (await followCreators(db, userId, [creatorId])).length > 0;
+
+  const subscription = await findFollowedCreator(db, userId, creatorId);
+  if (!subscription) throw new Error(`Subscription for creator ${creatorId} vanished after follow`);
+  return { subscription, created };
+}
+
+/**
+ * Follows existing creators in one statement, with the same rules as `followCreator`.
+ * Returns the IDs of creators that were newly followed or re-followed; the others were already followed.
+ */
+export async function followCreators(db: Db, userId: string, creatorIds: string[]): Promise<string[]> {
+  const unique = [...new Set(creatorIds)];
+  if (unique.length === 0) return [];
+
+  const rows = await db
     .insertInto("user_subscriptions")
-    .values({ user_id: userId, creator_id: creatorId, inbox_from: INITIAL_BACKLOG })
+    .values(unique.map((creatorId) => ({ user_id: userId, creator_id: creatorId, inbox_from: INITIAL_BACKLOG })))
     .onConflict((oc) =>
       oc
         .columns(["user_id", "creator_id"])
         .doUpdateSet({ active: true, followed_at: sql`now()`, inbox_from: INITIAL_BACKLOG })
         .where("user_subscriptions.active", "=", false),
     )
-    .returning("id")
-    .executeTakeFirst();
-
-  const subscription = await findFollowedCreator(db, userId, creatorId);
-  if (!subscription) throw new Error(`Subscription for creator ${creatorId} vanished after follow`);
-  return { subscription, created: inserted !== undefined };
+    .returning("creator_id")
+    .execute();
+  return rows.map((row) => row.creator_id);
 }
 
 /** Unfollows. The row is kept inactive so content states survive a later re-follow. */
@@ -48,10 +60,16 @@ export async function unfollow(db: Db, userId: string, subscriptionId: string): 
   if (result.numUpdatedRows === 0n) throw new AppError(ErrorCode.NOT_FOUND, "Subscription not found.");
 }
 
-/** Creators the user actively follows, alphabetically by name. */
-export async function listFollowedCreators(db: Db, userId: string): Promise<FollowedCreator[]> {
-  const rows = await followedCreatorsQuery(db, userId).execute();
-  return rows.map(toFollowedCreator);
+/** Creators the user actively follows, alphabetically by name; optionally only the given creators. */
+export async function listFollowedCreators(
+  db: Db,
+  userId: string,
+  { creatorIds }: { creatorIds?: string[] } = {},
+): Promise<FollowedCreator[]> {
+  if (creatorIds?.length === 0) return [];
+  let query = followedCreatorsQuery(db, userId);
+  if (creatorIds) query = query.where("c.id", "in", creatorIds);
+  return (await query.execute()).map(toFollowedCreator);
 }
 
 async function findFollowedCreator(db: Db, userId: string, creatorId: string): Promise<FollowedCreator | undefined> {

@@ -1,4 +1,4 @@
-import { ErrorCode } from "@finifeed/shared";
+import { ErrorCode, YOUTUBE_CHANNEL_ID_PATTERN } from "@finifeed/shared";
 import { AppError } from "../../errors/app-error";
 
 /** How a channel is looked up via `channels.list`. */
@@ -7,7 +7,6 @@ export type ChannelLookup =
   | { by: "id"; channelId: string }
   | { by: "username"; username: string };
 
-const CHANNEL_ID = /^UC[\w-]{22}$/;
 /** YouTube handles: 3–30 letters, digits, `_`, `-`, `.` (letters may be non-Latin). */
 const HANDLE = /^[\p{L}\p{M}\p{N}._-]{3,30}$/u;
 const LEGACY_USERNAME = /^[\w-]{1,100}$/;
@@ -30,7 +29,7 @@ export function parseChannelInput(raw: string): ChannelLookup {
     const handle = input.slice(1);
     return HANDLE.test(handle) ? { by: "handle", handle } : invalid(`"${input}" is not a valid YouTube handle.`);
   }
-  if (CHANNEL_ID.test(input)) return { by: "id", channelId: input };
+  if (YOUTUBE_CHANNEL_ID_PATTERN.test(input)) return { by: "id", channelId: input };
   if (HANDLE.test(input) && !input.includes(".")) return { by: "handle", handle: input };
 
   return parseChannelUrl(input);
@@ -51,7 +50,7 @@ function parseChannelUrl(input: string): ChannelLookup {
   const [first = "", second = ""] = url.pathname.split("/").filter(Boolean).map(safeDecode);
 
   if (first.startsWith("@")) return parseChannelInput(first);
-  if (first === "channel" && CHANNEL_ID.test(second)) return { by: "id", channelId: second };
+  if (first === "channel" && YOUTUBE_CHANNEL_ID_PATTERN.test(second)) return { by: "id", channelId: second };
   if (first === "user" && LEGACY_USERNAME.test(second)) return { by: "username", username: second };
   if (first === "c") invalid("Custom /c/ URLs can't be looked up. Please use the channel's @handle instead.");
   if (first === "watch" || first === "shorts" || first === "live") {

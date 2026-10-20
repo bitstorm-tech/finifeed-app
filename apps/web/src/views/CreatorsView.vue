@@ -98,6 +98,9 @@ onMounted(loadCreators);
       </div>
       <p v-if="formError" class="form-error" role="alert">{{ formError }}</p>
     </form>
+    <p class="import-hint">
+      Following lots of channels on YouTube? <RouterLink to="/creators/import">Import your subscriptions</RouterLink>
+    </p>
 
     <h2 class="section-title">Following</h2>
     <p v-if="listState === 'loading'" class="muted">Loading…</p>
@@ -158,7 +161,17 @@ onMounted(loadCreators);
 
 <style scoped>
 .add-form {
-  margin: 1rem 0;
+  margin: 1rem 0 0.75rem;
+}
+
+.import-hint {
+  margin: 0 0 1rem;
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+.import-hint a {
+  color: var(--accent);
 }
 
 .add-label {
@@ -170,29 +183,6 @@ onMounted(loadCreators);
 .add-row {
   display: flex;
   gap: 0.5rem;
-}
-
-.text-input {
-  flex: 1;
-  min-width: 0;
-  padding: 0.625rem 0.75rem;
-  border: 1px solid var(--border);
-  border-radius: 0.5rem;
-  background: var(--surface);
-  color: var(--text);
-  font: inherit;
-  /* 16px prevents iOS from zooming into the field. */
-  font-size: 1rem;
-}
-
-.text-input:focus {
-  outline: 2px solid var(--accent);
-  outline-offset: -1px;
-}
-
-.form-error {
-  margin: 0.5rem 0 0;
-  color: var(--warn);
 }
 
 .section-title {
@@ -279,19 +269,5 @@ onMounted(loadCreators);
   text-decoration: none;
   text-transform: uppercase;
   letter-spacing: 0.02em;
-}
-
-.muted {
-  color: var(--muted);
-}
-
-.link-button {
-  padding: 0;
-  border: none;
-  background: none;
-  color: var(--accent);
-  font: inherit;
-  text-decoration: underline;
-  cursor: pointer;
 }
 </style>

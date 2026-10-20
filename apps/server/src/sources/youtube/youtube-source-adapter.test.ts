@@ -105,6 +105,19 @@ describe("YouTube resolveAccount", () => {
     });
   });
 
+  test("resolveAccountsByExternalId looks up 50 IDs per request and leaves out unknown IDs", async () => {
+    const ids = Array.from({ length: 51 }, (_, i) => `UC${String(i).padStart(22, "0")}`);
+    const fetch = fakeFetch((url) =>
+      channelListResponse(...(url.searchParams.get("id") ?? "").split(",").slice(1).map((id) => channelFixture({ id }))),
+    );
+
+    const accounts = await adapterWith(fetch).resolveAccountsByExternalId(ids);
+
+    expect(fetch.calls.map((url) => url.searchParams.get("id")?.split(",").length)).toEqual([50, 1]);
+    expect(accounts.map((account) => account.externalId)).toEqual(ids.slice(1, 50));
+    expect(accounts[0]).toMatchObject({ sourceType: "YOUTUBE", canonicalUrl: `https://www.youtube.com/channel/${ids[1]}` });
+  });
+
   test("without an API key nothing is requested", async () => {
     const fetch = fakeFetch(() => channelListResponse(channelFixture()));
 

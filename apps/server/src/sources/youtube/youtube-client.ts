@@ -7,6 +7,8 @@ import type { ChannelLookup } from "./parse-channel-input";
 export const YOUTUBE_API_BASE_URL = "https://www.googleapis.com/youtube/v3";
 
 const REQUEST_TIMEOUT_MS = 10_000;
+/** `channels.list` accepts at most 50 comma-separated IDs. */
+const MAX_IDS_PER_REQUEST = 50;
 
 export type FetchFn = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 
@@ -47,6 +49,8 @@ export interface YouTubeClientOptions {
 export interface YouTubeClient {
   /** `channels.list` (1 quota unit). Returns null if no channel matches. */
   findChannel(lookup: ChannelLookup): Promise<YouTubeChannel | null>;
+  /** `channels.list` by ID, 50 IDs per request (1 quota unit each). Unknown IDs are left out. */
+  findChannelsByIds(channelIds: string[]): Promise<YouTubeChannel[]>;
 }
 
 /** Thin client for the official YouTube Data API v3 (spec §11.1). Upstream failures become AppErrors. */
@@ -97,15 +101,28 @@ export function createYouTubeClient({
       else if (lookup.by === "id") params.id = lookup.channelId;
       else params.forUsername = lookup.username;
 
-      const body = await get("channels", params, 1);
-      const parsed = ChannelListResponseSchema.safeParse(body);
-      if (!parsed.success) {
-        log.error({ issues: parsed.error.issues }, "unexpected channels.list response");
-        throw unavailable(parsed.error);
+      return (await listChannels(params))[0] ?? null;
+    },
+
+    async findChannelsByIds(channelIds) {
+      const channels: YouTubeChannel[] = [];
+      for (let i = 0; i < channelIds.length; i += MAX_IDS_PER_REQUEST) {
+        const id = channelIds.slice(i, i + MAX_IDS_PER_REQUEST).join(",");
+        channels.push(...(await listChannels({ part: "snippet,contentDetails", id })));
       }
-      return parsed.data.items?.[0] ?? null;
+      return channels;
     },
   };
+
+  async function listChannels(params: Record<string, string>): Promise<YouTubeChannel[]> {
+    const body = await get("channels", params, 1);
+    const parsed = ChannelListResponseSchema.safeParse(body);
+    if (!parsed.success) {
+      log.error({ issues: parsed.error.issues }, "unexpected channels.list response");
+      throw unavailable(parsed.error);
+    }
+    return parsed.data.items ?? [];
+  }
 }
 
 function unavailable(cause?: unknown) {

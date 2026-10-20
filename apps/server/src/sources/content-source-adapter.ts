@@ -21,6 +21,9 @@ export interface ContentSourceAdapter {
 
   /** Throws AppError INVALID_SOURCE_INPUT, CREATOR_NOT_FOUND, SOURCE_RATE_LIMITED or SOURCE_TEMPORARILY_UNAVAILABLE. */
   resolveAccount(input: string): Promise<ResolvedSourceAccount>;
+
+  /** Looks up accounts by their platform ID, e.g. from an export. Unknown IDs are left out of the result. */
+  resolveAccountsByExternalId(externalIds: string[]): Promise<ResolvedSourceAccount[]>;
 }
 
 export type SourceAdapters = Record<SourceType, ContentSourceAdapter>;

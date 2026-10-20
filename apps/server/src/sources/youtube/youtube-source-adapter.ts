@@ -1,6 +1,6 @@
 import { ErrorCode } from "@finifeed/shared";
 import { AppError } from "../../errors/app-error";
-import type { ContentSourceAdapter } from "../content-source-adapter";
+import type { ContentSourceAdapter, ResolvedSourceAccount } from "../content-source-adapter";
 import { parseChannelInput } from "./parse-channel-input";
 import type { YouTubeChannel, YouTubeClient } from "./youtube-client";
 
@@ -18,19 +18,26 @@ export function createYouTubeSourceAdapter(client: YouTubeClient): ContentSource
       if (!channel) {
         throw new AppError(ErrorCode.CREATOR_NOT_FOUND, `No YouTube channel found for "${input.trim()}".`);
       }
-
-      const metadata: YouTubeSourceMetadata = { uploadsPlaylistId: channel.contentDetails.relatedPlaylists.uploads };
-      const customUrl = channel.snippet.customUrl;
-      return {
-        sourceType: "YOUTUBE",
-        externalId: channel.id,
-        handle: customUrl?.startsWith("@") ? customUrl : null,
-        displayName: channel.snippet.title,
-        canonicalUrl: `https://www.youtube.com/channel/${channel.id}`,
-        avatarUrl: pickAvatar(channel),
-        metadata: { ...metadata },
-      };
+      return toResolvedAccount(channel);
     },
+
+    async resolveAccountsByExternalId(externalIds) {
+      return (await client.findChannelsByIds(externalIds)).map(toResolvedAccount);
+    },
+  };
+}
+
+function toResolvedAccount(channel: YouTubeChannel): ResolvedSourceAccount {
+  const metadata: YouTubeSourceMetadata = { uploadsPlaylistId: channel.contentDetails.relatedPlaylists.uploads };
+  const customUrl = channel.snippet.customUrl;
+  return {
+    sourceType: "YOUTUBE",
+    externalId: channel.id,
+    handle: customUrl?.startsWith("@") ? customUrl : null,
+    displayName: channel.snippet.title,
+    canonicalUrl: `https://www.youtube.com/channel/${channel.id}`,
+    avatarUrl: pickAvatar(channel),
+    metadata: { ...metadata },
   };
 }
 

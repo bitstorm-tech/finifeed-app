@@ -1,7 +1,7 @@
 # Finifeed — Product & Technical Specification
 
-**Version:** 0.3  
-**Date:** 2026-09-25  
+**Version:** 0.4  
+**Date:** 2026-10-20  
 **Status:** Implementation draft  
 **Working brand:** Finifeed  
 **Tagline:** *Your creator inbox.*  
@@ -18,6 +18,14 @@ When this document conflicts with an implementation convenience, **this document
 The first release is deliberately narrow: prove that people want a finite, creator-centric inbox before investing in broad social-platform aggregation.
 
 ## 1.1 Changelog
+
+### 0.4 (2026-10-20) — YouTube Takeout import
+
+Decision: users can import their YouTube subscriptions from a Google Takeout export (`subscriptions.csv`). It needs no OAuth, no Google app verification and no stored tokens, so it is allowed during validation. The OAuth import stays deferred. Consequences:
+
+- Onboarding: creators can be added by handle/URL or picked from a Takeout export (§5, §5.2).
+- New §11.6 and §13.6 describe the flow and API; nothing is followed without the user's selection.
+- `ContentSourceAdapter` gains `resolveAccountsByExternalId` for batch lookups (`channels.list` with up to 50 IDs per request).
 
 ### 0.3 (2026-09-25) — TypeScript end-to-end on Bun
 
@@ -176,7 +184,7 @@ The goal is the **shortest path to Slice 3 in the hands of real testers**, not t
 
 - Client: web app delivered as a link. No app store, no TestFlight, no native builds.
 - Testers: 20–50 people, closed beta, roughly 3 weeks.
-- Onboarding: testers add creators by handle. No subscription import. A tester who does not type in at least a handful of handles most likely does not have the problem Finifeed solves — that is a signal, not a defect.
+- Onboarding: testers add creators by handle or pick them from a YouTube Takeout export (§11.6). No OAuth subscription import. A tester who does not type in at least a handful of handles most likely does not have the problem Finifeed solves — that is a signal, not a defect.
 - Success: metrics in §20 plus one qualitative question asked to every tester at the end: *"Would you be disappointed if Finifeed disappeared tomorrow?"*
 
 Everything that does not shorten this path (native mobile, OAuth import, OIDC auth, per-creator rules) is deferred.
@@ -213,6 +221,8 @@ The user can initially add YouTube creators by:
 
 - pasting a YouTube channel URL;
 - entering a YouTube handle such as `@Fireship`.
+
+or by picking channels from the `subscriptions.csv` of a Google Takeout export (§11.6).
 
 Importing existing YouTube subscriptions via OAuth is **deferred to post-validation** (§11.5).
 
@@ -747,6 +757,24 @@ Flow:
 
 The product is intentionally curated; import should not recreate a 500-channel noisy subscription list by default.
 
+## 11.6 YouTube Takeout import
+
+Google Takeout lets users export their YouTube subscriptions as `subscriptions.csv` (channel ID, channel URL, title). Importing that file needs no OAuth and no stored credentials.
+
+Flow:
+
+1. the user exports "YouTube and YouTube Music → subscriptions" from Google Takeout and chooses the CSV in Finifeed;
+2. the server parses the file and returns the channels, marking those the user already follows. Nothing is stored and YouTube is not called;
+3. the user selects channels; none is preselected;
+4. the selected channel IDs are resolved via `channels.list` (up to 50 IDs per request, 1 quota unit each). Details come from YouTube, not from the file;
+5. source accounts and creators are upserted, and the creators are followed with the normal backlog window (§8.4).
+
+Rules:
+
+- Takeout localizes the header row and file names; columns are recognized by content (channel ID pattern `UC` + 22 characters), not by header.
+- Following is idempotent; channels YouTube no longer knows are reported, not stored.
+- The client sends at most 100 channel IDs per request and shows progress for larger selections.
+
 ---
 
 # 12. Instagram and TikTok strategy — NOT MVP
@@ -864,6 +892,15 @@ POST /api/v1/integrations/youtube/import
 ```
 
 Exact OAuth callback endpoints can be implementation-specific.
+
+## 13.6 YouTube Takeout import
+
+```http
+POST /api/v1/integrations/youtube/takeout/preview   { "csv": "<file content>" }
+POST /api/v1/integrations/youtube/takeout/import    { "channelIds": ["UC…"] }   (1–100 IDs)
+```
+
+`preview` returns `{ channels: [{ channelId, title, canonicalUrl, subscriptionId }] }`, alphabetically by title. `import` returns `{ followed: FollowedCreator[], alreadyFollowingCount, notFoundChannelIds }`. A file without channels is `INVALID_SOURCE_INPUT`.
 
 ---
 
