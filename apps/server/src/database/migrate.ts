@@ -2,6 +2,7 @@ import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import type postgres from "postgres";
 import type { Logger } from "pino";
+import { DATABASE_SCHEMA } from "./database";
 
 export const MIGRATIONS_DIR = join(import.meta.dir, "../../migrations");
 
@@ -23,13 +24,25 @@ interface AppliedMigration {
 export async function migrate(sql: postgres.Sql, logger: Logger, dir = MIGRATIONS_DIR): Promise<string[]> {
   const files = await listMigrationFiles(dir);
 
-  await sql`
-    create table if not exists schema_migrations (
-      filename text primary key,
-      checksum text not null,
-      applied_at timestamptz not null default now()
-    )
-  `;
+  await sql.begin(async (tx) => {
+    await tx`select pg_advisory_xact_lock(${MIGRATION_LOCK_KEY})`;
+    await tx`create schema if not exists ${tx(DATABASE_SCHEMA)}`;
+    // Databases migrated before the dedicated schema existed track their migrations in public.
+    const [legacy] = await tx`
+      select to_regclass('public.schema_migrations') is not null
+        and to_regclass(${`${DATABASE_SCHEMA}.schema_migrations`}) is null as present
+    `;
+    if (legacy?.present) {
+      await tx`alter table public.schema_migrations set schema ${tx(DATABASE_SCHEMA)}`;
+    }
+    await tx`
+      create table if not exists ${tx(DATABASE_SCHEMA)}.schema_migrations (
+        filename text primary key,
+        checksum text not null,
+        applied_at timestamptz not null default now()
+      )
+    `;
+  });
 
   const applied: string[] = [];
   for (const filename of files) {
@@ -49,6 +62,8 @@ export async function migrate(sql: postgres.Sql, logger: Logger, dir = MIGRATION
         return false;
       }
 
+      // public stays resolvable so migrations written before 0004 still find tables in legacy databases.
+      await tx.unsafe(`set local search_path = ${DATABASE_SCHEMA}, public`);
       await tx.unsafe(content);
       await tx`insert into schema_migrations (filename, checksum) values (${filename}, ${checksum})`;
       return true;

@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import postgres from "postgres";
 import { createTestDatabase, silentLogger, type TestDatabase } from "../testing/test-database";
 import { MIGRATIONS_DIR, migrate } from "./migrate";
 
@@ -37,6 +38,46 @@ describe("migrate", () => {
 
     const [user] = await database.sql`insert into users (email) values ('uuid@example.com') returning uuid_extract_version(id) as version`;
     expect(user?.version).toBe(7);
+
+    const tables = await database.sql`
+      select table_schema, table_name from information_schema.tables
+      where table_schema in ('public', 'finifeed') order by table_name
+    `;
+    expect(tables.map((row) => `${row.table_schema}.${row.table_name}`)).toEqual([
+      "finifeed.creators",
+      "finifeed.schema_migrations",
+      "finifeed.source_accounts",
+      "finifeed.user_subscriptions",
+      "finifeed.users",
+    ]);
+  });
+
+  test("moves a database migrated before the finifeed schema out of public", async () => {
+    const scratch = await createTestDatabase();
+    // Plain connection with the default search_path, as the server used before the dedicated schema.
+    const legacy = postgres(scratch.url, { max: 1, onnotice: () => {} });
+    try {
+      await legacy`create table schema_migrations (filename text primary key, checksum text not null, applied_at timestamptz not null default now())`;
+      for (const filename of ["0001_baseline.sql", "0002_creators_and_subscriptions.sql"]) {
+        const content = await Bun.file(join(MIGRATIONS_DIR, filename)).text();
+        await legacy.unsafe(content);
+        const checksum = new Bun.CryptoHasher("sha256").update(content).digest("hex");
+        await legacy`insert into schema_migrations (filename, checksum) values (${filename}, ${checksum})`;
+      }
+      await legacy`insert into users (email) values ('legacy@example.com')`;
+
+      expect(await migrate(scratch.sql, silentLogger)).toEqual(["0003_uuidv7_primary_keys.sql", "0004_finifeed_schema.sql"]);
+
+      const [moved] = await scratch.sql`select email from finifeed.users`;
+      expect(moved?.email).toBe("legacy@example.com");
+      const [user] = await scratch.sql`insert into users (email) values ('new@example.com') returning uuid_extract_version(id) as version`;
+      expect(user?.version).toBe(7);
+      const leftovers = await scratch.sql`select table_name from information_schema.tables where table_schema = 'public'`;
+      expect(leftovers).toHaveLength(0);
+    } finally {
+      await legacy.end();
+      await scratch.drop();
+    }
   });
 
   test("applies pending files in filename order", async () => {

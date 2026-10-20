@@ -60,6 +60,9 @@ export interface DatabaseSchema {
 
 export type Db = Kysely<DatabaseSchema>;
 
+/** PostgreSQL schema holding all application tables. Set as the connection's search_path, so queries stay unqualified. */
+export const DATABASE_SCHEMA = "finifeed";
+
 export interface DatabaseConnection {
   /** Raw postgres.js client, used by the migration runner. */
   sql: postgres.Sql;
@@ -72,6 +75,7 @@ export function connectDatabase(databaseUrl: string): DatabaseConnection {
     max: 10,
     connect_timeout: 5,
     onnotice: () => {},
+    connection: { search_path: DATABASE_SCHEMA },
   });
   const db = new Kysely<DatabaseSchema>({ dialect: new PostgresJSDialect({ postgres: sql }) });
 
