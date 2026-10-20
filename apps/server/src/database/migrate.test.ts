@@ -34,6 +34,9 @@ describe("migrate", () => {
 
     const second = await migrate(database.sql, silentLogger, MIGRATIONS_DIR);
     expect(second).toEqual([]);
+
+    const [user] = await database.sql`insert into users (email) values ('uuid@example.com') returning uuid_extract_version(id) as version`;
+    expect(user?.version).toBe(7);
   });
 
   test("applies pending files in filename order", async () => {

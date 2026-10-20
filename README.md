@@ -7,7 +7,7 @@ The product and architecture source of truth is [`FINIFEED_PRODUCT_TECH_SPEC.md`
 ## Prerequisites
 
 - [Bun](https://bun.sh) 1.4.2 (pinned in `package.json`)
-- An existing PostgreSQL database (user and database already created)
+- An existing PostgreSQL 18+ database (user and database already created)
 - Docker, only for `bun run test` (Testcontainers)
 
 ## Getting started

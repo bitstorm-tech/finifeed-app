@@ -12,7 +12,7 @@ export const silentLogger = pino({ level: "silent" });
 let container: Promise<StartedPostgreSqlContainer> | undefined;
 
 function sharedContainer() {
-  container ??= new PostgreSqlContainer("postgres:17-alpine").start();
+  container ??= new PostgreSqlContainer("postgres:18-alpine").start();
   return container;
 }
 
